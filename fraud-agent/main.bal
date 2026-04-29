@@ -168,3 +168,11 @@ service / on agentListener {
         };
     }
 }
+
+service /'fraud\-agent\-fraud\-agent\-endpoint on agentListener {
+    resource function post chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handleFraudChat(req)
+        };
+    }
+}
