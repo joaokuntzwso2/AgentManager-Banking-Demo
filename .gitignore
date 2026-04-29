@@ -1,0 +1,18 @@
+# Ballerina
+target/
+Dependencies.toml
+Package.md
+
+# OS
+.DS_Store
+
+# Docker
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Secrets
+.env
+.env.*

@@ -1,0 +1,39 @@
+services:
+  kyc-agent:
+    build: ./kyc-agent
+    ports:
+      - "8001:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+
+  fraud-agent:
+    build: ./fraud-agent
+    ports:
+      - "8002:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+
+  policy-rag-agent:
+    build: ./policy-rag-agent
+    ports:
+      - "8003:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+
+  omni-agent:
+    build: ./omni-agent
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      KYC_AGENT_URL: http://kyc-agent:8000
+      FRAUD_AGENT_URL: http://fraud-agent:8000
+      POLICY_RAG_AGENT_URL: http://policy-rag-agent:8000
+    depends_on:
+      - kyc-agent
+      - fraud-agent
+      - policy-rag-agent
