@@ -1,0 +1,65 @@
+openapi: 3.0.3
+info:
+  title: Policy RAG Agent API
+  version: 1.0.0
+  description: Banking policy RAG agent API for Agent Manager Custom API Agent.
+
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /chat:
+    post:
+      summary: Query the banking policy RAG agent
+      operationId: chatPolicyRagAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                session_id:
+                  type: string
+                customerId:
+                  type: string
+                sessionId:
+                  type: string
+                context:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Successful policy RAG response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - response
+                properties:
+                  response:
+                    type: string
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthPolicyRagAgent
+      responses:
+        "200":
+          description: Agent health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  agent:
+                    type: string
+                  mode:
+                    type: string
