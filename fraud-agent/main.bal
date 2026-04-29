@@ -6,6 +6,7 @@ function getPort() returns int {
     if portValue == "" {
         portValue = "8000";
     }
+
     int|error p = int:fromString(portValue);
     return p is int ? p : 8000;
 }
@@ -17,20 +18,16 @@ function getEnvOrDefault(string key, string fallback) returns string {
 
 listener http:Listener agentListener = new(getPort());
 
-type ChatRequest record {|
+type ChatRequest record {
     string message;
+    string session_id?;
     string customerId?;
     string sessionId?;
     map<json> context?;
-|};
+};
 
 type ChatResponse record {|
-    string agent;
-    string answer;
-    string decision?;
-    float riskScore?;
-    float confidence?;
-    string[] citations?;
+    string response;
 |};
 
 type OpenAIMessage record {
@@ -51,6 +48,36 @@ type OpenAIChoice record {
 type OpenAIResponse record {
     OpenAIChoice[] choices;
 };
+
+function getSessionId(ChatRequest req) returns string {
+    string? sid1 = req.session_id;
+    if sid1 is string {
+        return sid1;
+    }
+
+    string? sid2 = req.sessionId;
+    if sid2 is string {
+        return sid2;
+    }
+
+    return "unknown";
+}
+
+function getCustomerId(ChatRequest req) returns string {
+    string? customerId = req.customerId;
+    if customerId is string {
+        return customerId;
+    }
+
+    if req.context is map<json> {
+        json? customerIdValue = req.context["customerId"];
+        if customerIdValue is string {
+            return customerIdValue;
+        }
+    }
+
+    return "unknown";
+}
 
 function callOpenAI(string systemPrompt, string userPrompt) returns string|error {
     string apiKey = os:getEnv("OPENAI_API_KEY");
@@ -109,8 +136,8 @@ Always include:
 `;
 
         string userPrompt = string `
-Customer ID: ${req.customerId ?: "unknown"}
-Session ID: ${req.sessionId ?: "unknown"}
+Customer ID: ${getCustomerId(req)}
+Session ID: ${getSessionId(req)}
 
 Fraud case:
 ${req.message}
@@ -120,21 +147,12 @@ ${req.message}
 
         if result is error {
             return {
-                agent: "fraud-agent",
-                answer: "Fraud agent failed to call OpenAI: " + result.message(),
-                decision: "ERROR",
-                riskScore: 1.0,
-                confidence: 0.0
+                response: "Fraud agent failed to call OpenAI: " + result.message()
             };
         }
 
         return {
-            agent: "fraud-agent",
-            answer: result,
-            decision: "FRAUD_REVIEW_COMPLETED",
-            riskScore: 0.50,
-            confidence: 0.85,
-            citations: ["OpenAI-generated fraud analysis using bank fraud operations system prompt"]
+            response: result
         };
     }
 }
