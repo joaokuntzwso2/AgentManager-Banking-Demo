@@ -6,6 +6,7 @@ function getPort() returns int {
     if portValue == "" {
         portValue = "8000";
     }
+
     int|error p = int:fromString(portValue);
     return p is int ? p : 8000;
 }
@@ -17,20 +18,16 @@ function getEnvOrDefault(string key, string fallback) returns string {
 
 listener http:Listener agentListener = new(getPort());
 
-type ChatRequest record {|
+type ChatRequest record {
     string message;
+    string session_id?;
     string customerId?;
     string sessionId?;
     map<json> context?;
-|};
+};
 
 type ChatResponse record {|
-    string agent;
-    string answer;
-    string decision?;
-    float riskScore?;
-    float confidence?;
-    string[] citations?;
+    string response;
 |};
 
 type PolicyDoc record {|
@@ -86,6 +83,36 @@ final PolicyDoc[] POLICY_DOCS = [
     }
 ];
 
+function getSessionId(ChatRequest req) returns string {
+    string? sid1 = req.session_id;
+    if sid1 is string {
+        return sid1;
+    }
+
+    string? sid2 = req.sessionId;
+    if sid2 is string {
+        return sid2;
+    }
+
+    return "unknown";
+}
+
+function getCustomerId(ChatRequest req) returns string {
+    string? customerId = req.customerId;
+    if customerId is string {
+        return customerId;
+    }
+
+    if req.context is map<json> {
+        json? customerIdValue = req.context["customerId"];
+        if customerIdValue is string {
+            return customerIdValue;
+        }
+    }
+
+    return "unknown";
+}
+
 function score(string query, PolicyDoc doc) returns int {
     string q = query.toLowerAscii();
     string text = (doc.title + " " + doc.content).toLowerAscii();
@@ -94,7 +121,8 @@ function score(string query, PolicyDoc doc) returns int {
     string[] terms = [
         "payment", "limit", "loan", "affordability", "kyc", "pep", "sanction",
         "fraud", "device", "transfer", "manual", "review", "authentication",
-        "jurisdiction", "complaint", "beneficiary", "income", "debt"
+        "jurisdiction", "complaint", "beneficiary", "income", "debt",
+        "source of funds", "source of wealth", "onboarding", "aml"
     ];
 
     foreach string term in terms {
@@ -158,15 +186,10 @@ function callOpenAI(string systemPrompt, string userPrompt) returns string|error
     return response.choices[0].message.content;
 }
 
-service / on agentListener {
-    resource function get health() returns json {
-        return {status: "UP", agent: "policy-rag-agent", mode: "openai-rag"};
-    }
+function handlePolicyRagChat(ChatRequest req) returns ChatResponse {
+    string retrievedContext = retrieveContext(req.message);
 
-    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
-        string retrievedContext = retrieveContext(req.message);
-
-        string systemPrompt = string `
+    string systemPrompt = string `
 You are the banking policy RAG agent.
 
 Use only the provided policy context.
@@ -176,36 +199,66 @@ Cite policy IDs explicitly.
 Return a clear operational answer for banking staff.
 `;
 
-        string userPrompt = string `
+    string userPrompt = string `
 Retrieved policy context:
 ${retrievedContext}
 
-Customer ID: ${req.customerId ?: "unknown"}
-Session ID: ${req.sessionId ?: "unknown"}
+Customer ID: ${getCustomerId(req)}
+Session ID: ${getSessionId(req)}
 
 Question:
 ${req.message}
 `;
 
-        string|error result = callOpenAI(systemPrompt, userPrompt);
+    string|error result = callOpenAI(systemPrompt, userPrompt);
 
-        if result is error {
-            return {
-                agent: "policy-rag-agent",
-                answer: "Policy RAG agent failed to call OpenAI: " + result.message(),
-                decision: "ERROR",
-                riskScore: 1.0,
-                confidence: 0.0
-            };
-        }
-
+    if result is error {
         return {
-            agent: "policy-rag-agent",
-            answer: result,
-            decision: "POLICY_RAG_COMPLETED",
-            riskScore: 0.20,
-            confidence: 0.88,
-            citations: ["In-memory banking policy corpus"]
+            response: "Policy RAG agent failed to call OpenAI: " + result.message()
+        };
+    }
+
+    return {
+        response: result
+    };
+}
+
+service / on agentListener {
+    resource function get health() returns json {
+        return {status: "UP", agent: "policy-rag-agent", mode: "openai-rag"};
+    }
+
+    resource function post chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handlePolicyRagChat(req)
+        };
+    }
+
+    resource function post 'default\-default\-policy\-rag\-agent/chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handlePolicyRagChat(req)
+        };
+    }
+
+    resource function post 'policy\-rag\-agent\-policy\-rag\-agent\-endpoint/chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handlePolicyRagChat(req)
+        };
+    }
+}
+
+service /'default\-default\-policy\-rag\-agent on agentListener {
+    resource function post chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handlePolicyRagChat(req)
+        };
+    }
+}
+
+service /'policy\-rag\-agent\-policy\-rag\-agent\-endpoint on agentListener {
+    resource function post chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handlePolicyRagChat(req)
         };
     }
 }
