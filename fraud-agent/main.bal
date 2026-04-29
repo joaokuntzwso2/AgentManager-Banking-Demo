@@ -156,13 +156,15 @@ service / on agentListener {
         return {status: "UP", agent: "fraud-agent", mode: "openai"};
     }
 
-    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
-        return handleFraudChat(req);
+    resource function post chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handleFraudChat(req)
+        };
     }
-}
 
-service /'default\-default\-fraud\-agent on agentListener {
-    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
-        return handleFraudChat(req);
+    resource function post 'default\-default\-fraud\-agent/chat(@http:Payload ChatRequest req) returns http:Ok {
+        return {
+            body: handleFraudChat(req)
+        };
     }
 }
