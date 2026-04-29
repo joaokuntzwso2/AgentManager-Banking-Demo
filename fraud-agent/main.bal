@@ -111,13 +111,8 @@ function callOpenAI(string systemPrompt, string userPrompt) returns string|error
     return response.choices[0].message.content;
 }
 
-service / on agentListener {
-    resource function get health() returns json {
-        return {status: "UP", agent: "fraud-agent", mode: "openai"};
-    }
-
-    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
-        string systemPrompt = string `
+function handleFraudChat(ChatRequest req) returns ChatResponse {
+    string systemPrompt = string `
 You are the fraud detection specialist agent for a digital bank.
 
 Your job:
@@ -135,7 +130,7 @@ Always include:
 5. Explanation suitable for fraud operations
 `;
 
-        string userPrompt = string `
+    string userPrompt = string `
 Customer ID: ${getCustomerId(req)}
 Session ID: ${getSessionId(req)}
 
@@ -143,16 +138,31 @@ Fraud case:
 ${req.message}
 `;
 
-        string|error result = callOpenAI(systemPrompt, userPrompt);
+    string|error result = callOpenAI(systemPrompt, userPrompt);
 
-        if result is error {
-            return {
-                response: "Fraud agent failed to call OpenAI: " + result.message()
-            };
-        }
-
+    if result is error {
         return {
-            response: result
+            response: "Fraud agent failed to call OpenAI: " + result.message()
         };
+    }
+
+    return {
+        response: result
+    };
+}
+
+service / on agentListener {
+    resource function get health() returns json {
+        return {status: "UP", agent: "fraud-agent", mode: "openai"};
+    }
+
+    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
+        return handleFraudChat(req);
+    }
+}
+
+service /'default\-default\-fraud\-agent on agentListener {
+    resource function post chat(@http:Payload ChatRequest req) returns ChatResponse {
+        return handleFraudChat(req);
     }
 }
